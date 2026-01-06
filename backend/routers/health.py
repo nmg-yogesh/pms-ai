@@ -11,14 +11,15 @@ from backend.services.database_service import database_service
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/health", tags=["Health"])
+router = APIRouter(tags=["Health"])
 
 
-@router.get("/", response_model=HealthCheckResponse)
+@router.get("/health", response_model=HealthCheckResponse)
+@router.get("/health/", response_model=HealthCheckResponse, include_in_schema=False)
 async def health_check():
     """
     Check system health and status
-    
+
     **Response:**
     ```json
     {
@@ -33,12 +34,12 @@ async def health_check():
     try:
         # Test database connection
         db_connected = await database_service.test_connection()
-        
+
         # Check if OpenAI is configured
         openai_configured = bool(settings.OPENAI_API_KEY and settings.OPENAI_API_KEY != "")
-        
+
         status = "healthy" if (db_connected and openai_configured) else "degraded"
-        
+
         return HealthCheckResponse(
             status=status,
             version=settings.APP_VERSION,
@@ -46,7 +47,7 @@ async def health_check():
             openai_configured=openai_configured,
             timestamp=datetime.now()
         )
-        
+
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         return HealthCheckResponse(

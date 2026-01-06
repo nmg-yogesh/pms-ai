@@ -19,8 +19,8 @@ export const MessageList: React.FC<MessageListProps> = ({
   onExampleClick
 }) => {
   return (
-    <div className="flex-1 overflow-y-auto p-6">
-      <div className="max-w-4xl mx-auto space-y-4">
+    <div className="flex-1 overflow-y-auto p-6 bg-white">
+      <div className="max-w-5xl mx-auto space-y-6">
         {messages.length === 0 && (
           <ExampleQueries onExampleClick={onExampleClick} />
         )}
@@ -35,9 +35,9 @@ export const MessageList: React.FC<MessageListProps> = ({
 
         {loading && (
           <div className="flex justify-start">
-            <div className="bg-white shadow-md rounded-lg p-4 flex items-center gap-3">
-              <Loader2 className="w-5 h-5 text-purple-600 animate-spin" />
-              <span className="text-gray-700">Processing your question...</span>
+            <div className="bg-white shadow-md rounded-lg p-4 flex items-center gap-3 border border-gray-200">
+              <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
+              <span className="text-gray-700">Thinking...</span>
             </div>
           </div>
         )}

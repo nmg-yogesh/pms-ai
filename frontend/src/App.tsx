@@ -1,15 +1,16 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Message, DBConfig } from './types';
 import {
   ConfigPanel,
   Header,
   MessageList,
-  InputArea
+  InputArea,
+  ChatHistory,
+  ChatSession
 } from './components';
 import { useAutoScroll } from './hooks';
-import { simulateQueryExecution } from './utils/querySimulator';
-import { speakText } from './utils/speechUtils';
-import { convertNaturalLanguageToSQL, generateExplanation } from './services/openaiService';
+// import { speakText } from './utils/speechUtils';
+import { processAgenticQuery, checkHealth } from './services/openaiService';
 
 export default function AIDBAssistant() {
   const [input, setInput] = useState('');
@@ -21,10 +22,44 @@ export default function AIDBAssistant() {
     password: '',
     database: ''
   });
-  const [showConfig, setShowConfig] = useState(true);
+  const [showConfig, setShowConfig] = useState(false); // Changed to false - no config needed
   const [isListening, setIsListening] = useState(false);
+  const [backendStatus, setBackendStatus] = useState<{
+    connected: boolean;
+    message: string;
+  }>({ connected: false, message: 'Checking backend...' });
+  const [showHistory, setShowHistory] = useState(false);
+  const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<string>('default');
 
   const messagesEndRef = useAutoScroll([messages]);
+
+  // Check backend health on mount
+  useEffect(() => {
+    const checkBackendHealth = async () => {
+      try {
+        const health = await checkHealth();
+        if (health.status === 'healthy' && health.database_connected && health.openai_configured) {
+          setBackendStatus({
+            connected: true,
+            message: `Connected to PMS AI v${health.version}`
+          });
+        } else {
+          setBackendStatus({
+            connected: false,
+            message: 'Backend not fully configured'
+          });
+        }
+      } catch (error) {
+        setBackendStatus({
+          connected: false,
+          message: 'Backend not available. Please start the backend server.'
+        });
+      }
+    };
+
+    checkBackendHealth();
+  }, []);
 
   // Handle speech recognition
   const handleSpeechTranscript = (transcript: string) => {
@@ -71,68 +106,91 @@ export default function AIDBAssistant() {
     const currentInput = input;
     setInput('');
 
+    // Update chat session
+    updateChatSession(currentInput);
+
     try {
-      // Step 1: Convert natural language to SQL
-      const sqlQuery = await convertNaturalLanguageToSQL(currentInput);
+      // Use the unified backend API that handles everything:
+      // 1. Natural language to SQL conversion
+      // 2. Query validation
+      // 3. Database execution
+      // 4. Result analysis
+      // 5. Natural language explanation
+      const response = await processAgenticQuery(currentInput, undefined, true);
 
-      // Step 2: Execute the SQL query on the backend Postgres and persist results
-      const execResp = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1/'}/api/execute-sql`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sql: sqlQuery, persist: true }),
-      });
-
-      const execData = await execResp.json();
-      if (!execResp.ok) {
-        // If invalid attributes were referenced, show a friendly message
-        const invalid = execData.invalid || [];
-        const errMsg = invalid.length > 0
-          ? `The generated SQL references attributes that don't exist: ${invalid.join(', ')}. I won't run those. Please refine your question.`
-          : execData.error || 'Failed to execute SQL on server';
-
+      if (!response.success) {
         const errorMessage: Message = {
           type: 'error',
-          content: errMsg,
+          content: response.error || 'Failed to process query',
           timestamp: new Date()
         };
         setMessages(prev => [...prev, errorMessage]);
         setLoading(false);
         return;
       }
-      const queryResult = {
-        success: execData.ok,
-        data: execData.rows || [],
-        rowCount: execData.rowCount || (execData.rows ? execData.rows.length : 0),
-      };
 
-      // Step 3: Generate explanation
-      const explanation = await generateExplanation(
-        currentInput,
-        sqlQuery,
-        queryResult.data
-      );
-
+      // Create AI response message with all the data
       const aiMessage: Message = {
         type: 'ai',
-        content: explanation,
-        sqlQuery,
-        data: queryResult.data,
-        timestamp: new Date()
+        content: response.explanation || 'Query executed successfully',
+        sqlQuery: response.sql_query || undefined,
+        data: response.results || [],
+        timestamp: new Date(),
+        executionTime: response.execution_time_ms,
+        resultCount: response.result_count,
+        chartConfig: response.chart_config || undefined
       };
 
       setMessages(prev => [...prev, aiMessage]);
-      speakText(explanation);
+
+      // Speak the explanation if available
+      // if (response.explanation) {
+      //   speakText(response.explanation);
+      // }
 
     } catch (error) {
       const errorMessage: Message = {
         type: 'error',
-        content: `Sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        content: `Sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}. Please make sure the backend server is running.`,
         timestamp: new Date()
       };
       setMessages(prev => [...prev, errorMessage]);
     } finally {
       setLoading(false);
     }
+  };
+
+  const updateChatSession = (query: string) => {
+    setChatSessions(prev => {
+      const existingSession = prev.find(s => s.id === currentSessionId);
+      if (existingSession) {
+        return prev.map(s =>
+          s.id === currentSessionId
+            ? { ...s, title: query.slice(0, 50), messageCount: s.messageCount + 1, timestamp: new Date() }
+            : s
+        );
+      } else {
+        return [...prev, {
+          id: currentSessionId,
+          title: query.slice(0, 50),
+          timestamp: new Date(),
+          messageCount: 1
+        }];
+      }
+    });
+  };
+
+  const handleNewChat = () => {
+    setMessages([]);
+    setCurrentSessionId(`session-${Date.now()}`);
+    setShowHistory(false);
+  };
+
+  const handleSessionClick = (sessionId: string) => {
+    setCurrentSessionId(sessionId);
+    // In a real app, you'd load messages for this session
+    setMessages([]);
+    setShowHistory(false);
   };
 
   if (showConfig) {
@@ -146,22 +204,45 @@ export default function AIDBAssistant() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 flex flex-col">
-      <Header onConfigClick={() => setShowConfig(true)} />
-      <MessageList
-        messages={messages}
-        loading={loading}
-        messagesEndRef={messagesEndRef}
-        onExampleClick={(example) => setInput(example)}
+    <div className="h-screen bg-gray-50 flex flex-col relative overflow-hidden">
+      {/* Fixed Header */}
+      <div className="fixed top-0 left-0 right-0 z-50">
+        <Header
+          onConfigClick={showConfig ? undefined : () => setShowConfig(true)}
+          onHistoryClick={() => setShowHistory(!showHistory)}
+          onNewChat={handleNewChat}
+          backendStatus={backendStatus}
+        />
+      </div>
+
+      {/* Chat History Sidebar */}
+      <ChatHistory
+        sessions={chatSessions}
+        currentSessionId={currentSessionId}
+        onSessionClick={handleSessionClick}
+        onNewChat={handleNewChat}
+        onClose={() => setShowHistory(false)}
+        isOpen={showHistory}
       />
-      <InputArea
-        input={input}
-        onInputChange={setInput}
-        onSubmit={processQuery}
-        onMicClick={toggleListening}
-        isListening={isListening}
-        loading={loading}
-      />
+
+      {/* Main Content Area - with top padding for fixed header */}
+      <div className="flex-1 flex flex-col pt-[73px] overflow-hidden">
+        <MessageList
+          messages={messages}
+          loading={loading}
+          messagesEndRef={messagesEndRef}
+          onExampleClick={(example) => setInput(example)}
+        />
+
+        <InputArea
+          input={input}
+          onInputChange={setInput}
+          onSubmit={processQuery}
+          onMicClick={toggleListening}
+          isListening={isListening}
+          loading={loading}
+        />
+      </div>
     </div>
   );
 }

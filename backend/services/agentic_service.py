@@ -5,6 +5,7 @@ import logging
 from typing import Dict, Any
 from backend.services.openai_service import openai_service
 from backend.services.database_service import database_service
+from backend.services.visualization_service import visualization_service
 from backend.models.schemas import AgenticQueryRequest, AgenticQueryResponse
 
 logger = logging.getLogger(__name__)
@@ -47,13 +48,27 @@ class AgenticService:
             
             # Step 3: Execute the query
             results, execution_time_ms = await database_service.execute_query(sql_query)
-            
-            # Step 4: Generate explanation if requested
+
+            # Step 4: Analyze results for visualization
+            chart_config = None
+            if results and len(results) > 0:
+                logger.info(f"Analyzing visualization for {len(results)} results")
+                chart_config = visualization_service.analyze_and_suggest_chart(
+                    request.query,
+                    results,
+                    sql_query
+                )
+
+            # Step 5: Analyze results and generate explanation if requested
             explanation = None
             if request.include_explanation:
-                explanation = await openai_service.explain_results(request.query, results)
-            
-            # Step 5: Return response
+                explanation = await openai_service.explain_results(
+                    request.query,
+                    results,
+                    sql_query
+                )
+
+            # Step 6: Return response
             return AgenticQueryResponse(
                 success=True,
                 query=request.query,
@@ -62,7 +77,8 @@ class AgenticService:
                 explanation=explanation,
                 result_count=len(results),
                 execution_time_ms=execution_time_ms,
-                error=None
+                error=None,
+                chart_config=chart_config
             )
             
         except Exception as e:

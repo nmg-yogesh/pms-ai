@@ -1,0 +1,41 @@
+nohup: ignoring input
+INFO:     Will watch for changes in these directories: ['/home/yogesh_kumar_dangi/Documents/pms/pms-hq-ai']
+INFO:     Uvicorn running on http://0.0.0.0:8020 (Press CTRL+C to quit)
+INFO:     Started reloader process [345806] using WatchFiles
+INFO:     Started server process [345812]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:42766 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53634 - "POST /api/v1/agentic/query HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56728 - "POST /api/v1/agentic/query HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59832 - "POST /api/v1/agentic/query HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37166 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53912 - "POST /api/v1/agentic/query HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52964 - "POST /api/v1/agentic/query HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52162 - "POST /api/v1/agentic/query HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41368 - "POST /api/v1/agentic/query HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41378 - "POST /api/v1/agentic/query HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41926 - "POST /api/v1/agentic/query HTTP/1.1" 200 OK
+WARNING:  WatchFiles detected changes in 'backend/services/visualization_service.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [345812]
+INFO:     Started server process [461100]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:53734 - "POST /api/v1/agentic/query HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53744 - "POST /api/v1/agentic/query HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42004 - "POST /api/v1/agentic/query HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41986 - "POST /api/v1/agentic/query HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50316 - "POST /api/v1/agentic/query HTTP/1.1" 200 OK
+WARNING:  WatchFiles detected changes in 'backend/services/visualization_service.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [461100]
+INFO:     Started server process [485443]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:47544 - "POST /api/v1/agentic/query HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42918 - "POST /api/v1/agentic/query HTTP/1.1" 200 OK

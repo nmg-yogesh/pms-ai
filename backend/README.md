@@ -2,6 +2,20 @@
 
 Natural language query interface for your PMS (Project Management System) database using AI.
 
+## ✨ New Features
+
+### 🔄 Dynamic Schema Loading
+- **Automatic schema extraction** from `pms.sql` file
+- **30+ tables** automatically loaded and available for queries
+- **Zero maintenance** - schema updates automatically when pms.sql changes
+- **Enhanced AI accuracy** with complete database context
+
+### 📊 Advanced Result Analysis
+- **Intelligent insights** from query results
+- **Pattern detection** and anomaly identification
+- **Actionable recommendations** based on data
+- **Natural language explanations** for non-technical users
+
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -127,26 +141,29 @@ print(response.json())
 
 ```
 backend/
-├── main.py                 # FastAPI application entry point
-├── config.py              # Configuration settings
-├── requirements.txt       # Python dependencies
-├── .env.example          # Example environment variables
+├── main.py                    # FastAPI application entry point
+├── config.py                  # Configuration settings
+├── requirements.txt           # Python dependencies
+├── .env.example              # Example environment variables
+├── test_schema_loader.py     # 🆕 Schema loading verification
+├── example_usage.py          # 🆕 Usage examples and demo
 ├── models/
 │   ├── __init__.py
-│   ├── database.py       # Database connection
-│   └── schemas.py        # Pydantic models
+│   ├── database.py           # Database connection
+│   └── schemas.py            # Pydantic models
 ├── services/
 │   ├── __init__.py
-│   ├── openai_service.py # OpenAI integration
-│   ├── database_service.py # Database operations
-│   └── agentic_service.py # Main AI logic
+│   ├── openai_service.py     # 🔄 OpenAI integration (enhanced)
+│   ├── database_service.py   # Database operations
+│   └── agentic_service.py    # 🔄 Main AI logic (enhanced)
 ├── routers/
 │   ├── __init__.py
-│   ├── agentic.py        # AI query endpoints
-│   └── health.py         # Health check endpoints
+│   ├── agentic.py            # AI query endpoints
+│   └── health.py             # Health check endpoints
 └── utils/
     ├── __init__.py
-    └── prompts.py        # AI prompts
+    ├── prompts.py            # 🔄 Dynamic AI prompts
+    └── schema_loader.py      # 🆕 Schema extraction from pms.sql
 ```
 
 ## 🔧 Configuration
@@ -203,16 +220,36 @@ pip install -r requirements.txt --force-reinstall
 
 ## 📝 Development
 
+### Testing Schema Loading
+```bash
+# Verify schema is loaded correctly
+python3 test_schema_loader.py
+
+# View example queries and system info
+python3 example_usage.py
+```
+
 ### Adding New Query Types
-1. Update `utils/prompts.py` with new schema information
-2. Add examples to the system prompt
+1. Schema is automatically loaded from `pms.sql` - no manual updates needed!
+2. Add examples to `utils/prompts.py` if desired
 3. Test with various queries
+
+### Updating Database Schema
+1. Update `pms.sql` with new schema
+2. Restart backend to reload schema
+3. Schema changes are automatically picked up
 
 ### Logging
 Logs are output to console. Adjust level in `main.py`:
 ```python
 logging.basicConfig(level=logging.DEBUG)  # More verbose
 ```
+
+## 📚 Additional Documentation
+
+- **[SCHEMA_INTEGRATION.md](../SCHEMA_INTEGRATION.md)** - Detailed schema loading documentation
+- **[DEVELOPER_GUIDE.md](../DEVELOPER_GUIDE.md)** - Complete developer guide
+- **API Docs** - http://localhost:8000/docs (when running)
 
 ## 🚀 Production Deployment
 

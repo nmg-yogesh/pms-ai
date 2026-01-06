@@ -38,6 +38,17 @@ class SQLQueryResponse(BaseModel):
     query_type: Optional[QueryType] = Field(None, description="Type of query detected")
 
 
+class ChartConfig(BaseModel):
+    """Configuration for chart visualization"""
+    chart_type: str = Field(..., description="Type of chart: bar, stacked_bar, pie, line, doughnut")
+    x_axis: Optional[str] = Field(None, description="Column to use for X axis")
+    y_axis: Optional[List[str]] = Field(None, description="Columns to use for Y axis (can be multiple for stacked)")
+    title: Optional[str] = Field(None, description="Chart title")
+    description: Optional[str] = Field(None, description="Chart description")
+    stacked_keys: Optional[List[str]] = Field(None, description="Keys for stacked bar chart")
+    colors: Optional[Dict[str, str]] = Field(None, description="Custom colors for chart elements")
+
+
 class AgenticQueryResponse(BaseModel):
     """Response schema for agentic query"""
     success: bool = Field(..., description="Whether query was successful")
@@ -48,7 +59,8 @@ class AgenticQueryResponse(BaseModel):
     result_count: int = Field(0, description="Number of results returned")
     execution_time_ms: float = Field(0, description="Query execution time in milliseconds")
     error: Optional[str] = Field(None, description="Error message if query failed")
-    
+    chart_config: Optional[ChartConfig] = Field(None, description="Recommended chart configuration")
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -59,7 +71,13 @@ class AgenticQueryResponse(BaseModel):
                 "explanation": "There are currently 15 pending help tickets in the system.",
                 "result_count": 1,
                 "execution_time_ms": 45.2,
-                "error": None
+                "error": None,
+                "chart_config": {
+                    "chart_type": "pie",
+                    "x_axis": "status",
+                    "y_axis": ["count"],
+                    "title": "Help Tickets by Status"
+                }
             }
         }
 

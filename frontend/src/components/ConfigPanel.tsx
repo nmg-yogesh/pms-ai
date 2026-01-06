@@ -1,7 +1,6 @@
 import React from 'react';
 import { Database } from 'lucide-react';
 import { DBConfig } from '../types';
-import { CONFIG_DISCLAIMER, DEMO_MESSAGE } from '../constants';
 
 interface ConfigPanelProps {
   dbConfig: DBConfig;
@@ -23,8 +22,10 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
         </div>
 
         <div className="mb-6">
-          <h2 className="text-xl font-semibold mb-4">Database Configuration</h2>
-          <p className="text-sm text-gray-600 mb-4">{CONFIG_DISCLAIMER}</p>
+          <h2 className="text-xl font-semibold mb-4">Backend Configuration</h2>
+          <p className="text-sm text-gray-600 mb-4">
+            Note: Database configuration is now handled by the backend server for security.
+          </p>
 
           <div className="space-y-4">
             <div>
@@ -77,8 +78,8 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
           Continue to Assistant
         </button>
 
-        <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
-          <strong>Demo Mode:</strong> {DEMO_MESSAGE}
+        <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
+          <strong>Info:</strong> This configuration panel is optional. The backend server handles all database connections securely.
         </div>
       </div>
     </div>

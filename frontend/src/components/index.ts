@@ -5,3 +5,6 @@ export { MessageBubble } from './MessageBubble';
 export { DataTable } from './DataTable';
 export { ExampleQueries } from './ExampleQueries';
 export { InputArea } from './InputArea';
+export { ChartVisualization } from './ChartVisualization';
+export { ChatHistory } from './ChatHistory';
+export type { ChatSession } from './ChatHistory';

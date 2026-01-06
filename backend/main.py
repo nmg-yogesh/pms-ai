@@ -11,6 +11,7 @@ import time
 from backend.config import settings
 from backend.routers import agentic, health
 from backend.models.database import test_connection
+from backend.utils.schema_loader import DB_SCHEMA
 
 # Configure logging
 logging.basicConfig(
@@ -38,7 +39,14 @@ async def lifespan(app: FastAPI):
         logger.info("✓ OpenAI API key configured")
     else:
         logger.warning("✗ OpenAI API key not configured")
-    
+
+    # Check schema loading
+    if DB_SCHEMA and len(DB_SCHEMA) > 100:
+        table_count = DB_SCHEMA.count("Table:")
+        logger.info(f"✓ Database schema loaded ({table_count} tables)")
+    else:
+        logger.warning("✗ Database schema not loaded properly")
+
     yield
     
     # Shutdown
@@ -58,7 +66,7 @@ app = FastAPI(
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

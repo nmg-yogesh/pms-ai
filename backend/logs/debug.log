@@ -1,0 +1,70 @@
+[2025-12-29 18:59:27] [INFO] ========================================
+[2025-12-29 18:59:27] [INFO] Starting Production Deployment
+[2025-12-29 18:59:27] [INFO] Project: backend
+[2025-12-29 18:59:27] [INFO] Port: 8020
+[2025-12-29 18:59:27] [INFO] ========================================
+[2025-12-29 18:59:27] [INFO] Verifying environment configuration
+[2025-12-29 18:59:27] [INFO] Environment configuration verified
+[2025-12-29 18:59:27] [INFO] Setting up virtual environment
+[2025-12-29 18:59:29] [INFO] Virtual environment ready
+[2025-12-29 18:59:29] [INFO] Testing database connection
+[2025-12-29 18:59:29] [ERROR] ERROR: Database connection test failed
+[2025-12-29 18:59:29] [DEBUG] System Info:
+Linux nmg-d-99 6.8.0-90-generic #91~22.04.1-Ubuntu SMP PREEMPT_DYNAMIC Thu Nov 20 15:20:45 UTC 2 x86_64 x86_64 x86_64 GNU/Linux
+[2025-12-29 18:59:29] [DEBUG] Processes on Port 8020:
+[2025-12-29 19:02:31] [INFO] ========================================
+[2025-12-29 19:02:31] [INFO] Starting Production Deployment
+[2025-12-29 19:02:31] [INFO] Project: backend
+[2025-12-29 19:02:31] [INFO] Port: 8020
+[2025-12-29 19:02:31] [INFO] ========================================
+[2025-12-29 19:02:31] [INFO] Verifying environment configuration
+[2025-12-29 19:02:31] [INFO] Environment configuration verified
+[2025-12-29 19:02:31] [INFO] Setting up virtual environment
+[2025-12-29 19:02:32] [INFO] Virtual environment ready
+[2025-12-29 19:02:32] [INFO] Testing database connection
+[2025-12-29 19:02:36] [INFO] Database connection verified
+[2025-12-29 19:02:36] [INFO] Starting Uvicorn server on port 8020
+[2025-12-29 19:02:36] [INFO] Verifying application
+[2025-12-29 19:02:37] [INFO] Application verified successfully
+[2025-12-29 19:02:37] [INFO] Checking for processes on port 8020
+[2025-12-29 19:02:37] [INFO] No processes found on port 8020
+[2025-12-29 19:02:37] [INFO] Starting server with backend.main:app from /home/yogesh_kumar_dangi/Documents/pms/pms-hq-ai
+[2025-12-29 19:02:37] [INFO] Uvicorn started with PID 903119
+[2025-12-29 19:05:51] [INFO] ========================================
+[2025-12-29 19:05:51] [INFO] Starting Production Deployment
+[2025-12-29 19:05:51] [INFO] Project: backend
+[2025-12-29 19:05:51] [INFO] Port: 8020
+[2025-12-29 19:05:51] [INFO] ========================================
+[2025-12-29 19:05:51] [INFO] Verifying environment configuration
+[2025-12-29 19:05:51] [INFO] Environment configuration verified
+[2025-12-29 19:05:51] [INFO] Setting up virtual environment
+[2025-12-29 19:05:51] [INFO] Virtual environment ready
+[2025-12-29 19:05:51] [INFO] Testing database connection
+[2025-12-29 19:05:56] [INFO] Database connection verified
+[2025-12-29 19:05:56] [INFO] Starting Uvicorn server on port 8020
+[2025-12-29 19:05:56] [INFO] Verifying application
+[2025-12-29 19:05:57] [INFO] Application verified successfully
+[2025-12-29 19:05:57] [INFO] Checking for processes on port 8020
+[2025-12-29 19:05:57] [INFO] Terminating PID 903119
+[2025-12-29 19:06:00] [INFO] Terminating PID 903125
+[2025-12-29 19:06:03] [INFO] Terminating PID 903126
+[2025-12-29 19:06:06] [INFO] Starting server with backend.main:app from /home/yogesh_kumar_dangi/Documents/pms/pms-hq-ai
+[2025-12-29 19:06:06] [INFO] Uvicorn started with PID 909731
+[2026-01-05 12:55:10] [INFO] ========================================
+[2026-01-05 12:55:10] [INFO] Starting Production Deployment
+[2026-01-05 12:55:10] [INFO] Project: backend
+[2026-01-05 12:55:10] [INFO] Port: 8020
+[2026-01-05 12:55:10] [INFO] ========================================
+[2026-01-05 12:55:10] [INFO] Verifying environment configuration
+[2026-01-05 12:55:10] [INFO] Environment configuration verified
+[2026-01-05 12:55:10] [INFO] Setting up virtual environment
+[2026-01-05 12:55:11] [INFO] Virtual environment ready
+[2026-01-05 12:55:11] [INFO] Testing database connection
+[2026-01-05 12:55:15] [INFO] Database connection verified
+[2026-01-05 12:55:15] [INFO] Starting Uvicorn server on port 8020
+[2026-01-05 12:55:15] [INFO] Verifying application
+[2026-01-05 12:55:17] [INFO] Application verified successfully
+[2026-01-05 12:55:17] [INFO] Checking for processes on port 8020
+[2026-01-05 12:55:17] [INFO] No processes found on port 8020
+[2026-01-05 12:55:17] [INFO] Starting server with backend.main:app from /home/yogesh_kumar_dangi/Documents/pms/pms-hq-ai
+[2026-01-05 12:55:17] [INFO] Uvicorn started with PID 162642

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Mic, MicOff, Play } from 'lucide-react';
+import { Mic, MicOff, Send } from 'lucide-react';
 
 interface InputAreaProps {
   input: string;
@@ -25,40 +25,47 @@ export const InputArea: React.FC<InputAreaProps> = ({
   };
 
   return (
-    <div className="bg-white border-t p-4">
+    <div className="bg-white border-t p-4 shadow-lg">
       <div className="max-w-4xl mx-auto">
-        <div className="flex gap-2">
-          <button
-            onClick={onMicClick}
-            disabled={loading}
-            className={`p-3 rounded-lg transition ${
-              isListening
-                ? 'bg-red-600 hover:bg-red-700 text-white'
-                : 'bg-purple-100 hover:bg-purple-200 text-purple-600'
-            } disabled:opacity-50`}
-          >
-            {isListening ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
-          </button>
-
+        <div className="relative">
           <input
             type="text"
             value={input}
             onChange={(e) => onInputChange(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder="Ask a question about your database..."
+            placeholder="Start Asking for e.g. how many HIT I have, Show most pending task member, Create report of all IT Department Members, etc"
             disabled={loading}
-            className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100"
+            className="w-full px-4 py-4 pr-24 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 transition text-gray-800 placeholder-gray-400"
           />
 
-          <button
-            onClick={onSubmit}
-            disabled={loading || !input.trim()}
-            className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition flex items-center gap-2"
-          >
-            <Play className="w-5 h-5" />
-            Ask
-          </button>
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2">
+            <button
+              onClick={onMicClick}
+              disabled={loading}
+              className={`p-2 rounded-lg transition ${
+                isListening
+                  ? 'bg-red-100 text-red-600 hover:bg-red-200'
+                  : 'text-gray-400 hover:text-blue-600 hover:bg-blue-50'
+              } disabled:opacity-50`}
+              title={isListening ? 'Stop recording' : 'Voice input'}
+            >
+              {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+            </button>
+
+            <button
+              onClick={onSubmit}
+              disabled={loading || !input.trim()}
+              className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition"
+              title="Send message"
+            >
+              <Send className="w-5 h-5" />
+            </button>
+          </div>
         </div>
+
+        <p className="text-xs text-gray-400 mt-2 text-center">
+          Ask anything related to Process HQ
+        </p>
       </div>
     </div>
   );
