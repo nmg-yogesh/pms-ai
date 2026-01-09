@@ -6,7 +6,7 @@ import re
 from typing import Optional, Tuple, List
 from openai import OpenAI
 from backend.config import settings
-from backend.utils.prompts import get_system_prompt, EXPLANATION_PROMPT, VALIDATION_PROMPT
+from backend.utils.prompts import get_system_prompt, get_role_system_prompt, EXPLANATION_PROMPT, VALIDATION_PROMPT
 from backend.utils.schema_loader import load_schema_from_sql, parse_sql_schema
 
 logger = logging.getLogger(__name__)
@@ -26,6 +26,86 @@ class OpenAIService:
         self.temperature = settings.OPENAI_TEMPERATURE
         self.max_tokens = settings.OPENAI_MAX_TOKENS
         self._load_schema_cache()
+
+    async def generate_procedural_steps(self, user_query: str, role: Optional[str] = None, max_steps: int = 10) -> list:
+        """Generate a concise numbered list of steps for procedural admin queries.
+
+        Prefer role-aware system prompt (includes transcript content when available). Returns a list of step strings.
+        """
+        try:
+            system_prompt = get_system_prompt()
+            if role:
+                try:
+                    system_prompt = get_role_system_prompt(role, user_query=user_query)
+                except Exception as e:
+                    logger.warning(f"Failed to build role-aware system prompt for steps ({role}): {e}")
+
+            user_msg = f"Provide a concise, numbered list (1-{max_steps}) of short steps to: {user_query}. Return only the numbered steps, one per line, with no extra commentary. Each step should be one short sentence."
+
+            response = client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_msg}
+                ],
+                temperature=0.2,
+                max_tokens=400
+            )
+
+            content = response.choices[0].message.content.strip()
+
+            # Parse numbered lines
+            import re
+            steps = []
+            for line in content.splitlines():
+                m = re.match(r'^\s*(?:\d+\.|\d+\)|\s*)(.*\S.*)$', line)
+                if m:
+                    steps.append(m.group(1).strip().rstrip('.'))
+                else:
+                    # also accept lines that start with a verb and are short
+                    line = line.strip()
+                    if line and len(line) < 200:
+                        steps.append(line.rstrip('.'))
+
+            # Limit to max_steps
+            return steps[:max_steps]
+
+        except Exception as e:
+            logger.error(f"Error generating procedural steps: {e}")
+            return []
+
+    async def generate_definition(self, subject: str, role: Optional[str] = None) -> str:
+        """Generate a concise 1-2 sentence definition for a subject, preferring role-aware context.
+
+        Returns definition string or empty if generation failed.
+        """
+        try:
+            system_prompt = get_system_prompt()
+            if role:
+                try:
+                    system_prompt = get_role_system_prompt(role)
+                except Exception as e:
+                    logger.warning(f"Failed to build role-aware system prompt for definition ({role}): {e}")
+
+            user_msg = f"Provide a concise 1-2 sentence definition of: {subject}. Return only the definition with no extra commentary."
+
+            response = client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_msg}
+                ],
+                temperature=0.2,
+                max_tokens=200
+            )
+
+            content = response.choices[0].message.content.strip()
+            # strip surrounding quotes/backticks
+            return content.strip().strip('"').strip('\'')
+
+        except Exception as e:
+            logger.error(f"Error generating definition: {e}")
+            return ""
 
     def _load_schema_cache(self):
         """Load and cache parsed schema for validation"""
@@ -110,7 +190,7 @@ class OpenAIService:
             logger.warning(f"Schema validation error: {e}")
             return True, f"Validation skipped: {str(e)}"
 
-    async def generate_sql_query(self, user_query: str, retry_count: int = 0) -> str:
+    async def generate_sql_query(self, user_query: str, role: Optional[str] = None, retry_count: int = 0) -> str:
         """
         Generate SQL query from natural language with schema validation
 
@@ -125,7 +205,14 @@ class OpenAIService:
             logger.info(f"Generating SQL for query: {user_query} (attempt {retry_count + 1})")
 
             # Get the system prompt with current database schema
-            system_prompt = get_system_prompt()
+            if role:
+                try:
+                    system_prompt = get_role_system_prompt(role, user_query=user_query)
+                except Exception as e:
+                    logger.warning(f"Failed to build role-aware system prompt ({role}): {e}")
+                    system_prompt = get_system_prompt()
+            else:
+                system_prompt = get_system_prompt()
 
             # Add schema validation reminder for retries
             if retry_count > 0:
@@ -162,7 +249,7 @@ class OpenAIService:
                 # Retry once with enhanced prompt
                 if retry_count < 1:
                     logger.info("Retrying SQL generation with schema validation feedback")
-                    return await self.generate_sql_query(user_query, retry_count + 1)
+                    return await self.generate_sql_query(user_query, role, retry_count + 1)
                 else:
                     # Return the query anyway but log the issue
                     logger.error(f"SQL generation failed schema validation after retry: {validation_msg}")
@@ -249,7 +336,21 @@ class OpenAIService:
             # Limit results for explanation to avoid token limits
             limited_results = results[:10] if len(results) > 10 else results
 
-            # Enhanced prompt with analysis request
+            # Decide whether a longer explanation is needed
+            need_long_explanation = False
+            query_lc = user_query.lower() if user_query else ''
+
+            if len(results) > 10:
+                need_long_explanation = True
+            if any(k in query_lc for k in ("explain", "why", "insight", "analyze", "anomal", "recommend")):
+                need_long_explanation = True
+            # Quick heuristic: if results have many columns (complex), ask for more detail
+            if results and isinstance(results[0], dict) and len(results[0].keys()) > 3:
+                need_long_explanation = True
+
+            # Enhanced prompt with adaptive analysis request
+            length_instruction = "Provide a full, clear explanation (3-6 sentences) and include recommendations when applicable." if need_long_explanation else "Provide a clear, concise summary (1-2 sentences)."
+
             enhanced_prompt = f"""You are a helpful AI assistant analyzing database query results.
 
 User asked: "{user_query}"
@@ -258,7 +359,7 @@ Query results: {limited_results}
 Total results count: {len(results)}
 
 Please provide:
-1. A clear, concise summary of what the data shows (2-3 sentences)
+1. {length_instruction}
 2. Key insights or patterns in the data
 3. Any notable findings or anomalies
 4. Actionable recommendations if applicable
@@ -270,7 +371,7 @@ If there are no results, explain that clearly and suggest why that might be."""
                 model=self.model,
                 messages=[{"role": "user", "content": enhanced_prompt}],
                 temperature=0.7,
-                max_tokens=500
+                max_tokens=800
             )
 
             explanation = response.choices[0].message.content.strip()

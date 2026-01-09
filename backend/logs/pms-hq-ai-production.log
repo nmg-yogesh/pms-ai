@@ -39,3 +39,33 @@ INFO:     Waiting for application startup.
 INFO:     Application startup complete.
 INFO:     127.0.0.1:47544 - "POST /api/v1/agentic/query HTTP/1.1" 200 OK
 INFO:     127.0.0.1:42918 - "POST /api/v1/agentic/query HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51562 - "POST /api/v1/agentic/query HTTP/1.1" 200 OK
+WARNING:  WatchFiles detected changes in 'backend/services/visualization_service.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [485443]
+INFO:     Started server process [656940]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'backend/services/visualization_service.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [656940]
+INFO:     Started server process [657751]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:39396 - "POST /api/v1/agentic/query HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46134 - "POST /api/v1/agentic/query HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51918 - "POST /api/v1/agentic/query HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51920 - "POST /api/v1/agentic/query HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34556 - "POST /api/v1/agentic/query HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34562 - "POST /api/v1/agentic/query HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45420 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51780 - "POST /api/v1/agentic/query HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [657751]
+INFO:     Stopping reloader process [345806]

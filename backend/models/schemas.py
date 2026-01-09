@@ -22,6 +22,8 @@ class AgenticQueryRequest(BaseModel):
     user_id: Optional[int] = Field(None, description="User ID making the query")
     include_explanation: bool = Field(True, description="Include AI explanation of results")
     speak_response: bool = Field(False, description="Generate TTS response")
+    # Optional role to tailor prompts (e.g., 'fms-admin', 'hit-admin', 'recurring-admin')
+    role: Optional[str] = Field(None, description="Optional role for role-specific prompts (e.g., 'fms-admin')")
     
     @validator('query')
     def validate_query(cls, v):

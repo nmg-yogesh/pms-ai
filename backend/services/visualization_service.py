@@ -323,6 +323,12 @@ class VisualizationService:
                         label = col.replace('_', ' ').replace('tickets', '').replace('ticket', '').strip().title()
                         status_data.append({'label': label, 'value': numeric_value})
 
+            # Check if all values are None/null (no data)
+            # If so, return None to show table only with "No data" message
+            if len(status_data) == 0:
+                logger.info(f"No data found for status query: {query}")
+                return None
+
             # Need at least 2 status columns (even if some are zero) to show pie chart
             if len(status_data) >= 2:
                 # Generate colors for pie chart slices based on status
@@ -462,7 +468,23 @@ class VisualizationService:
                     idx = numeric_cols.index(col)
                     default_colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']
                     col_colors[col] = default_colors[idx % len(default_colors)]
-        
+
+        # Check if there's any actual data (non-null values) in numeric columns
+        # If all values are None/null, return None to show table only
+        has_data = False
+        for row in results:
+            for col in numeric_cols:
+                value = row.get(col)
+                if value is not None:
+                    has_data = True
+                    break
+            if has_data:
+                break
+
+        if not has_data:
+            logger.info(f"No data found for stacked bar chart query: {query}")
+            return None
+
         return ChartConfig(
             chart_type="stacked_bar",
             x_axis=category_col,

@@ -40,8 +40,38 @@ export interface AgenticQueryResponse {
 export interface ExampleQueriesResponse {
   hit_tickets: string[];
   fms_workflows: string[];
+  recurring_tasks: string[];
   users: string[];
   general: string[];
+}
+
+export interface ChatSession {
+  id: string;
+  user_id?: number;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  message_count: number;
+  is_active: boolean;
+}
+
+export interface ConversationMessage {
+  id: number;
+  session_id: string;
+  message_type: 'user' | 'assistant' | 'system' | 'error';
+  content: string;
+  query?: string;
+  sql_query?: string;
+  result_count?: number;
+  execution_time_ms?: number;
+  chart_config?: ChartConfig;
+  metadata?: Record<string, any>;
+  created_at: string;
+}
+
+export interface ConversationHistory {
+  session: ChatSession;
+  messages: ConversationMessage[];
 }
 
 /**
@@ -56,7 +86,8 @@ export interface ExampleQueriesResponse {
 export const processAgenticQuery = async (
   query: string,
   userId?: number,
-  includeExplanation: boolean = true
+  includeExplanation: boolean = true,
+  sessionId?: string
 ): Promise<AgenticQueryResponse> => {
   const requestBody: AgenticQueryRequest = {
     query,
@@ -65,11 +96,18 @@ export const processAgenticQuery = async (
     speak_response: false
   };
 
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+
+  // Add session ID header if provided
+  if (sessionId) {
+    headers['X-Session-Id'] = sessionId;
+  }
+
   const response = await fetch(`${API_BASE}/agentic/query`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: JSON.stringify(requestBody),
   });
 
@@ -119,6 +157,82 @@ export const checkHealth = async (): Promise<{
 
   if (!response.ok) {
     throw new Error('Health check failed');
+  }
+
+  return await response.json();
+};
+
+/**
+ * Create a new chat session
+ */
+export const createChatSession = async (
+  sessionId: string,
+  title: string,
+  userId?: number
+): Promise<ChatSession> => {
+  const response = await fetch(`${API_BASE}/conversation/sessions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      session_id: sessionId,
+      title,
+      user_id: userId,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to create chat session');
+  }
+
+  return await response.json();
+};
+
+/**
+ * Get conversation history for a session
+ */
+export const getConversationHistory = async (
+  sessionId: string,
+  limit: number = 100
+): Promise<ConversationHistory> => {
+  const response = await fetch(
+    `${API_BASE}/conversation/history/${sessionId}?limit=${limit}`,
+    {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error('Failed to fetch conversation history');
+  }
+
+  return await response.json();
+};
+
+/**
+ * List all chat sessions
+ */
+export const listChatSessions = async (
+  userId?: number,
+  limit: number = 50
+): Promise<{ sessions: ChatSession[]; total_count: number }> => {
+  const params = new URLSearchParams();
+  if (userId) params.append('user_id', userId.toString());
+  params.append('limit', limit.toString());
+
+  const response = await fetch(`${API_BASE}/conversation/sessions?${params}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to list chat sessions');
   }
 
   return await response.json();

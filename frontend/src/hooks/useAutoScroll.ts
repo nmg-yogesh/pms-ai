@@ -1,12 +1,12 @@
 import { useEffect, useRef } from 'react';
 
-export const useAutoScroll = (dependencies: any[]) => {
+export const useAutoScroll = (dependency: any) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Scroll to bottom when dependency changes (e.g., messages array reference).
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [dependencies]);
+    messagesEndRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' });
+  }, [dependency]);
 
   return messagesEndRef;
 };

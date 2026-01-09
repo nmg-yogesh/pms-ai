@@ -9,7 +9,7 @@ import logging
 import time
 
 from backend.config import settings
-from backend.routers import agentic, health
+from backend.routers import agentic, health, conversation
 from backend.models.database import test_connection
 from backend.utils.schema_loader import DB_SCHEMA
 
@@ -101,6 +101,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 # Include routers
 app.include_router(health.router, prefix=settings.API_V1_PREFIX)
 app.include_router(agentic.router, prefix=settings.API_V1_PREFIX)
+app.include_router(conversation.router, prefix=settings.API_V1_PREFIX)
 
 
 @app.get("/")

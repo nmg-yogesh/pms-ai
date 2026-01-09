@@ -27,8 +27,8 @@ export const Header: React.FC<HeaderProps> = ({
             className="h-8 w-auto"
           />
           <div className="border-l border-gray-300 pl-3">
-            <h1 className="text-xl font-bold text-gray-800">PROCESS HQ</h1>
-            <p className="text-xs text-gray-500">Ask Process AI HQ anything</p>
+            {/* <h1 className="text-xl font-bold text-gray-800">PROCESS HQ</h1> */}
+            <p className="text-xs text-gray-600">Ask ProcessHQ AI anything</p>
           </div>
         </div>
 
@@ -65,7 +65,7 @@ export const Header: React.FC<HeaderProps> = ({
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
             >
               <History className="w-4 h-4" />
-              <span className="hidden md:inline">New Chat</span>
+              <span className="hidden md:inline">Chat History</span>
             </button>
           )}
         </div>

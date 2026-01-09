@@ -1,8 +1,8 @@
 """
 API Routes for Agentic AI functionality
 """
-from fastapi import APIRouter, HTTPException, Depends
-from typing import Dict, Any
+from fastapi import APIRouter, HTTPException, Depends, Header
+from typing import Dict, Any, Optional
 import logging
 
 from backend.models.schemas import (
@@ -18,10 +18,13 @@ router = APIRouter(prefix="/agentic", tags=["Agentic AI"])
 
 
 @router.post("/query", response_model=AgenticQueryResponse)
-async def process_agentic_query(request: AgenticQueryRequest):
+async def process_agentic_query(
+    request: AgenticQueryRequest,
+    x_session_id: Optional[str] = Header(None, description="Chat session ID for conversation tracking")
+):
     """
     Process a natural language query using AI
-    
+
     **Example Request:**
     ```json
     {
@@ -31,7 +34,10 @@ async def process_agentic_query(request: AgenticQueryRequest):
         "speak_response": false
     }
     ```
-    
+
+    **Headers:**
+    - X-Session-Id: Optional session ID for conversation tracking
+
     **Example Response:**
     ```json
     {
@@ -47,10 +53,10 @@ async def process_agentic_query(request: AgenticQueryRequest):
     ```
     """
     try:
-        logger.info(f"Received query request: {request.query}")
-        response = await agentic_service.process_query(request)
+        logger.info(f"Received query request: {request.query} (session: {x_session_id})")
+        response = await agentic_service.process_query(request, session_id=x_session_id)
         return response
-        
+
     except Exception as e:
         logger.error(f"Error in query endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))

@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     OPENAI_TEMPERATURE: float = 0.3
     OPENAI_MAX_TOKENS: int = 2000
 
+    # Path to transcript file used for role-specific prompts (e.g., docs/transcript.pdf)
+    TRANSCRIPT_PATH: str = str(Path(__file__).resolve().parent.parent / "docs" / "transcript.pdf")
+
     # Security - NO HARDCODED SECRET KEY
     # Pydantic will automatically load from .env file
     SECRET_KEY: str

@@ -10,7 +10,13 @@ import {
 } from './components';
 import { useAutoScroll } from './hooks';
 // import { speakText } from './utils/speechUtils';
-import { processAgenticQuery, checkHealth } from './services/openaiService';
+import {
+  processAgenticQuery,
+  checkHealth,
+  createChatSession,
+  getConversationHistory,
+  listChatSessions
+} from './services/openaiService';
 
 export default function AIDBAssistant() {
   const [input, setInput] = useState('');
@@ -31,8 +37,18 @@ export default function AIDBAssistant() {
   const [showHistory, setShowHistory] = useState(false);
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string>('default');
+  const [historyLoading, setHistoryLoading] = useState<boolean>(true);
 
-  const messagesEndRef = useAutoScroll([messages]);
+  // Normalize backend session objects into UI-friendly shape
+  const normalizeSession = (s: any) => ({
+    id: s.id,
+    title: s.title || s.name || 'Untitled',
+    // Prefer updated_at, fallback to created_at, otherwise now
+    timestamp: s.updated_at ? new Date(s.updated_at) : s.created_at ? new Date(s.created_at) : new Date(),
+    messageCount: s.message_count ?? s.messageCount ?? 0
+  });
+
+  const messagesEndRef = useAutoScroll(messages);
 
   // Check backend health on mount
   useEffect(() => {
@@ -42,7 +58,7 @@ export default function AIDBAssistant() {
         if (health.status === 'healthy' && health.database_connected && health.openai_configured) {
           setBackendStatus({
             connected: true,
-            message: `Connected to PMS AI v${health.version}`
+            message: `Connected`
           });
         } else {
           setBackendStatus({
@@ -59,6 +75,42 @@ export default function AIDBAssistant() {
     };
 
     checkBackendHealth();
+  }, []);
+
+  // Load existing chat sessions and history
+  useEffect(() => {
+    const loadSessions = async () => {
+      setHistoryLoading(true);
+      try {
+        const res = await listChatSessions();
+        if (res.sessions && res.sessions.length > 0) {
+          // Do NOT auto-load the first session's history.
+          // Show a fresh "new chat" until the user selects an existing session.
+          const mappedSessions = res.sessions.map(normalizeSession);
+          setChatSessions(mappedSessions);
+          setMessages([]); // keep UI on a new chat
+          setCurrentSessionId('default');
+        } else {
+          // create a default session if none exist and select it
+          const id = `session-${Date.now()}`;
+          try {
+            const created = await createChatSession(id, 'New chat');
+            setChatSessions([normalizeSession(created)]);
+            setCurrentSessionId(created.id);
+            setMessages([]);
+          } catch (e) {
+            console.error('Failed to create default session', e);
+            setCurrentSessionId('default');
+          }
+        }
+      } catch (err) {
+        console.error('Failed to list chat sessions', err);
+      } finally {
+        setHistoryLoading(false);
+      }
+    };
+
+    loadSessions();
   }, []);
 
   // Handle speech recognition
@@ -106,8 +158,8 @@ export default function AIDBAssistant() {
     const currentInput = input;
     setInput('');
 
-    // Update chat session
-    updateChatSession(currentInput);
+    // Update chat session (ensure session exists)
+    await updateChatSession(currentInput);
 
     try {
       // Use the unified backend API that handles everything:
@@ -116,7 +168,7 @@ export default function AIDBAssistant() {
       // 3. Database execution
       // 4. Result analysis
       // 5. Natural language explanation
-      const response = await processAgenticQuery(currentInput, undefined, true);
+      const response = await processAgenticQuery(currentInput, undefined, true, currentSessionId);
 
       if (!response.success) {
         const errorMessage: Message = {
@@ -160,37 +212,68 @@ export default function AIDBAssistant() {
     }
   };
 
-  const updateChatSession = (query: string) => {
-    setChatSessions(prev => {
-      const existingSession = prev.find(s => s.id === currentSessionId);
-      if (existingSession) {
-        return prev.map(s =>
-          s.id === currentSessionId
-            ? { ...s, title: query.slice(0, 50), messageCount: s.messageCount + 1, timestamp: new Date() }
-            : s
-        );
-      } else {
-        return [...prev, {
-          id: currentSessionId,
-          title: query.slice(0, 50),
-          timestamp: new Date(),
-          messageCount: 1
-        }];
-      }
-    });
+  const updateChatSession = async (query: string) => {
+    const exists = chatSessions.find(s => s.id === currentSessionId);
+    if (exists) {
+      setChatSessions(prev => prev.map(s =>
+        s.id === currentSessionId
+          ? { ...s, title: query.slice(0, 50), messageCount: (s as any).messageCount ? (s as any).messageCount + 1 : 1, timestamp: new Date() }
+          : s
+      ));
+      return;
+    }
+
+    // Create session on the backend if it does not exist
+    try {
+      const created = await createChatSession(currentSessionId || `session-${Date.now()}`, query.slice(0, 50));
+      setChatSessions(prev => [normalizeSession(created), ...prev]);
+    } catch (e) {
+      // Fallback to local session if backend fails
+      const local = normalizeSession({ id: currentSessionId || `session-${Date.now()}`, title: query.slice(0, 50), created_at: new Date().toISOString(), updated_at: new Date().toISOString(), message_count: 1, is_active: true });
+      setChatSessions(prev => [...prev, local as any]);
+    }
   };
 
-  const handleNewChat = () => {
+  const handleNewChat = async () => {
+    const newId = `session-${Date.now()}`;
     setMessages([]);
-    setCurrentSessionId(`session-${Date.now()}`);
     setShowHistory(false);
+
+    try {
+      const created = await createChatSession(newId, 'New chat');
+      setChatSessions(prev => [normalizeSession(created), ...prev]);
+      setCurrentSessionId(created.id);
+    } catch (e) {
+      // Fallback locally
+      setChatSessions(prev => [...prev, normalizeSession({ id: newId, title: 'New chat', created_at: new Date().toISOString(), updated_at: new Date().toISOString(), message_count: 0, is_active: true }) as any]);
+      setCurrentSessionId(newId);
+    }
   };
 
-  const handleSessionClick = (sessionId: string) => {
+  const handleSessionClick = async (sessionId: string) => {
     setCurrentSessionId(sessionId);
-    // In a real app, you'd load messages for this session
-    setMessages([]);
     setShowHistory(false);
+    setHistoryLoading(true);
+
+    try {
+      const history = await getConversationHistory(sessionId);
+      const mapped = history.messages.map(m => ({
+        type: m.message_type === 'assistant' ? 'ai' : m.message_type === 'user' ? 'user' : 'error',
+        content: m.content,
+        timestamp: new Date(m.created_at),
+        sqlQuery: m.sql_query || undefined,
+        data: undefined,
+        executionTime: m.execution_time_ms || undefined,
+        resultCount: m.result_count || undefined,
+        chartConfig: m.chart_config || undefined
+      }));
+      setMessages(mapped);
+    } catch (e) {
+      console.error('Failed to load conversation history', e);
+      setMessages([]);
+    } finally {
+      setHistoryLoading(false);
+    }
   };
 
   if (showConfig) {
@@ -226,14 +309,17 @@ export default function AIDBAssistant() {
       />
 
       {/* Main Content Area - with top padding for fixed header */}
-      <div className="flex-1 flex flex-col pt-[73px] overflow-hidden">
+      <div className="flex-1 flex flex-col pt-[73px] overflow-hidden relative">
         <MessageList
           messages={messages}
           loading={loading}
+          historyLoading={historyLoading}
+          showExamples={true} // re-enabled homepage suggestions
           messagesEndRef={messagesEndRef}
           onExampleClick={(example) => setInput(example)}
         />
 
+        {/* Bottom input for active chats (always present) */}
         <InputArea
           input={input}
           onInputChange={setInput}
