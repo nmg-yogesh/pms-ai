@@ -15,6 +15,17 @@ ALLOWED_KEYWORDS = [
     "who", "how", "which", "of"
 ]
 
+# Entity keywords that define what the query is about
+ENTITY_KEYWORDS = [
+    "user", "users", "employee", "employees", "staff", "person", "people",
+    "ticket", "tickets", "task", "tasks",
+    "department", "departments", "designation", "designations",
+    "fms", "email", "phone", "contact"
+]
+
+# Vague pronouns that require context
+VAGUE_PRONOUNS = ["their", "them", "they", "it", "its", "this", "that", "these", "those", "his", "her"]
+
 def is_meaningful_prompt(text: str):
     if not text:
         return False, "Query is empty."
@@ -55,5 +66,12 @@ def is_meaningful_prompt(text: str):
     # Domain keyword check (VERY IMPORTANT)
     if not any(keyword in words for keyword in ALLOWED_KEYWORDS):
         return False, "Query not related to supported domain."
+
+    # Check for vague prompts using pronouns without specifying an entity
+    has_vague_pronoun = any(pronoun in words for pronoun in VAGUE_PRONOUNS)
+    has_entity = any(entity in words for entity in ENTITY_KEYWORDS)
+
+    if has_vague_pronoun and not has_entity:
+        return False, "Query is too vague. Please specify what you want to query (e.g., users, tickets, tasks)."
 
     return True, "Query is meaningful."

@@ -13,13 +13,36 @@ from backend.models.conversation import (
     ConversationHistoryResponse,
     ConversationContextCreate,
     ConversationContextResponse,
-    SessionListResponse
+    SessionListResponse,
+    ConversationErrorCreate,
+    ConversationErrorResponse
 )
 from backend.services.conversation_service import conversation_service
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/conversation", tags=["Conversation History"])
+
+
+@router.post("/error", response_model=ConversationErrorResponse)
+async def add_error_message(error_data: ConversationErrorCreate):
+    """
+    Add an error message to a conversation
+
+    **Example Request:**
+    ```json
+    {
+        "session_id": "session-1234567890",
+        "error_message": "Failed to process query"
+    }
+    ```
+    """
+    logger.info(f"Adding error message: {error_data.error_message}")
+    try:
+        return await conversation_service.store_error(error_data)
+    except Exception as e:
+        logger.error(f"Error adding error message: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) 
 
 
 @router.post("/sessions", response_model=ChatSessionResponse)

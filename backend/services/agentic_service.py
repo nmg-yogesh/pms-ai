@@ -49,7 +49,7 @@ class AgenticService:
                 explanation=None,
                 result_count=0,
                 execution_time_ms=0,
-                error=f"Invalid input: {reason}"
+                error=f"Invalid input: {reason} {request.query}"
                 )
             
             # Step 1: Generate SQL query from natural language (role-aware when provided)
@@ -68,7 +68,7 @@ class AgenticService:
                     explanation=None,
                     result_count=0,
                     execution_time_ms=0,
-                    error=f"Query validation failed: {validation_reason}"
+                    error=f"Query validation failed: {validation_reason} {request.query}"
                 )
             
             # Step 3: Execute the query
@@ -141,7 +141,7 @@ class AgenticService:
                 explanation=None,
                 result_count=0,
                 execution_time_ms=0,
-                error=str(e)
+                error=str(e) + " " + request.query
             )
     
     async def get_example_queries(self) -> Dict[str, list]:

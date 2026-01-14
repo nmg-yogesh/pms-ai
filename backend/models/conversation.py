@@ -13,6 +13,17 @@ class MessageType(str, Enum):
     ASSISTANT = "assistant"
     SYSTEM = "system"
     ERROR = "error"
+    
+
+class ConversationErrorCreate(BaseModel):
+    """Schema for creating an error message"""
+    session_id: str = Field(..., description="Session ID")
+    error_message: str = Field(..., description="Error message")
+
+class ConversationErrorResponse(BaseModel):
+    """Schema for error response"""
+    error: str = Field(..., description="Error message")   
+    id  : int = Field(..., description="Message ID") 
 
 
 class ChatSessionCreate(BaseModel):

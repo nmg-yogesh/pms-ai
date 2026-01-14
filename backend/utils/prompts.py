@@ -108,6 +108,90 @@ CRITICAL INSTRUCTIONS - FOLLOW STRICTLY:
    - **IMPORTANT**: For "tickets created by user", "tickets requested by user" → use user_id
    - Default assumption: "user's tickets" means tickets assigned to them (use helping_person_id)
 
+9. **RECURRING TASKS TABLE HIERARCHY (CRITICAL)**:
+
+   **TABLE HIERARCHY:**
+   ```
+   recurring_master_tasks (Parent - Main Task Definition)
+       ├── recurring_task_assignees (Child - Users assigned to master task, multiple users per master)
+       └── recurring_tasks (Child - Date-wise occurrences for tracking)
+               └── recurring_task_trackings (Grandchild - Completion status per user per occurrence)
+   ```
+
+   **TABLE DETAILS:**
+   - **recurring_master_tasks**: Stores the main task definition (description, priority, frequency, raiser, dates)
+     * `id` → Primary key (referenced as `recurring_task_id` in recurring_tasks, `recurring_master_task_id` in assignees)
+     * `mt_id` → Human-readable master task ID
+     * `raiser_id` → User who created the task
+     * `task_frequency_id` → How often task repeats
+     * `archieve` → Archive flag (note: spelled "archieve" not "archive")
+
+   - **recurring_task_assignees**: Users assigned to each master task (ONE master → MANY assignees)
+     * `recurring_master_task_id` → FK to recurring_master_tasks.id
+     * `user_id` → Assigned user
+     * `recurring_task_uid` → Unique identifier for this user's assignment
+     * `archive` → Archive flag for this assignment
+     * `reviewer_id` → Who reviews this user's work
+
+   - **recurring_tasks**: Date-wise occurrences/instances of master task
+     * `recurring_task_id` → FK to recurring_master_tasks.id
+     * `assigned_on` → DATE when this occurrence is due
+     * `task_id` → Unique task instance ID
+     * `sequence_number` → Sequence within the recurring series
+     * `raiser_id`, `helper_id` → Copied from master for denormalization
+
+   - **recurring_task_trackings**: Completion status per user per task occurrence
+     * `recurring_task_id` → FK to recurring_tasks.id (NOT master!)
+     * `user_id` → The assignee
+     * `completed_at` → Timestamp when marked complete
+     * `not_done_at` → Timestamp when marked as not done
+     * `reviewer_status` → 1=approved, 2=rejected
+
+   **JOIN PATTERNS:**
+   - User's tasks for a date:
+     ```
+     recurring_tasks rt
+     INNER JOIN recurring_task_trackings rtt ON rtt.recurring_task_id = rt.id
+     INNER JOIN recurring_task_assignees rta ON rta.recurring_master_task_id = rt.recurring_task_id AND rta.user_id = rtt.user_id
+     ```
+   - Master task with all assignees:
+     ```
+     recurring_master_tasks rmt
+     INNER JOIN recurring_task_assignees rta ON rta.recurring_master_task_id = rmt.id
+     ```
+   - **CRITICAL JOIN NOTE for recurring_tasks table:**
+     * `recurring_tasks` has column `recurring_task_id` (FK to recurring_master_tasks.id)
+     * `recurring_tasks` does NOT have `recurring_master_task_id` column
+     * `recurring_task_assignees` has column `recurring_master_task_id` (FK to recurring_master_tasks.id)
+     * To join recurring_tasks with recurring_task_assignees:
+       `recurring_task_assignees rta ON rta.recurring_master_task_id = rt.recurring_task_id`
+     * NEVER use `rt.recurring_master_task_id` - this column does not exist!
+
+   **PERFORMANCE OPTIMIZATION:**
+   - For `assigned_on` filtering: `assigned_on >= '2026-01-13' AND assigned_on <= '2026-01-13'`
+   - NEVER use `date(assigned_on)` function - prevents index usage
+   - Use `COALESCE(rta.archive, 0) <> 1` for archive check
+   - Use INNER JOIN with users instead of EXISTS subquery
+
+   **STATUS DETERMINATION:**
+   - Completed: `rtt.completed_at IS NOT NULL`
+   - Not Done: `rtt.not_done_at IS NOT NULL`
+   - Pending: `rtt.completed_at IS NULL AND rtt.not_done_at IS NULL`
+
+   **UNIQUE TASK ID FORMULA:**
+   `IF(rta.recurring_task_uid IS NOT NULL AND rt.sequence_number IS NOT NULL, CONCAT(rta.recurring_task_uid, '.', rt.sequence_number), rt.task_id)`
+
+   **USER RELATIONSHIPS (CRITICAL):**
+   - **raiser_id** (in recurring_master_tasks/recurring_tasks): User who CREATED the task
+   - **rta.user_id** (in recurring_task_assignees): User ASSIGNED to the master task
+   - **rtt.user_id** (in recurring_task_trackings): User ASSIGNED to do the task occurrence
+   - **IMPORTANT**: For "user's recurring tasks", "tasks assigned to user", "list [name] recurring tasks" → use rta.user_id or rtt.user_id (assignee)
+   - **IMPORTANT**: For "tasks created by user", "tasks raised by user" → use raiser_id
+   - **Default assumption**: "[user]'s recurring tasks" means tasks assigned to them (use assignee's user_id, NOT raiser_id)
+   - **For master task queries**: JOIN recurring_task_assignees and filter by rta.user_id
+   - **For occurrence/tracking queries**: JOIN recurring_task_trackings and filter by rtt.user_id
+   - **NEVER filter by raiser_id when user asks for "user's tasks" or "list tasks of [name]"**
+
 EXAMPLE QUERIES:
 
 **HELP TICKETS:**
@@ -212,18 +296,18 @@ Q: "Show all active recurring tasks"
 A: SELECT rt.id, rt.task_id, rt.description, rt.task_priority,
    CONCAT(raiser.first_name, ' ', raiser.last_name) AS raiser_name,
    CONCAT(helper.first_name, ' ', helper.last_name) AS helper_name,
-   rt.start_date, rt.end_date, rt.status
+   rt.start_date, rt.end_date, rt.assigned_on
    FROM recurring_tasks rt
    LEFT JOIN users raiser ON rt.raiser_id = raiser.id
    LEFT JOIN users helper ON rt.helper_id = helper.id
-   WHERE rt.status IN ('pending', 'in_progress')
-   ORDER BY rt.start_date DESC
+   WHERE rt.assigned_on >= CURDATE()
+   ORDER BY rt.assigned_on DESC
    LIMIT 100;
 
 Q: "How many recurring tasks are overdue?"
 A: SELECT COUNT(*) AS overdue_tasks
    FROM recurring_tasks rt
-   WHERE rt.end_date < CURDATE() AND rt.status != 'completed';
+   WHERE rt.end_date < CURDATE();
 
 Q: "Recurring tasks counts by priority"
 A: SELECT
@@ -243,21 +327,38 @@ A: SELECT
    GROUP BY helper_name
    ORDER BY due_this_week DESC;
 
-Q: "Recurring tasks assigned to Rajesh Bhati"
-A: SELECT rt.id, rt.task_id, rt.description, rt.task_priority,
-   rt.start_date, rt.end_date, rt.status,
-   CONCAT(raiser.first_name, ' ', raiser.last_name) AS raiser_name
+Q: "Recurring tasks assigned to Rajesh Bhati" or "List all Rajesh recurring tasks" or "Show Amit's recurring tasks"
+A: SELECT
+    rt.id,
+    rt.task_id,
+    rt.description,
+    rt.task_priority,
+    rt.assigned_on,
+    rtt.completed_at,
+    rtt.not_done_at,
+    CONCAT(raiser.first_name, ' ', raiser.last_name) AS raiser_name,
+    CONCAT(assignee.first_name, ' ', assignee.last_name) AS assignee_name,
+    IF(
+        rta.recurring_task_uid IS NOT NULL AND rt.sequence_number IS NOT NULL,
+        CONCAT(rta.recurring_task_uid, '.', rt.sequence_number),
+        rt.task_id
+    ) AS recurring_task_uid
    FROM recurring_tasks rt
+   INNER JOIN recurring_task_trackings rtt ON rtt.recurring_task_id = rt.id
+   INNER JOIN recurring_task_assignees rta
+       ON rta.recurring_master_task_id = rt.recurring_task_id
+       AND rta.user_id = rtt.user_id
+   INNER JOIN users assignee ON rtt.user_id = assignee.id
    LEFT JOIN users raiser ON rt.raiser_id = raiser.id
-   INNER JOIN users helper ON rt.helper_id = helper.id
-   WHERE CONCAT(helper.first_name, ' ', helper.last_name) LIKE '%Rajesh Bhati%'
-   ORDER BY rt.start_date DESC
+   WHERE CONCAT(assignee.first_name, ' ', assignee.last_name) LIKE '%Rajesh Bhati%'
+       AND COALESCE(rta.archive, 0) <> 1
+   ORDER BY rt.assigned_on DESC
    LIMIT 100;
 
 Q: "High priority recurring tasks due this week"
 A: SELECT rt.id, rt.task_id, rt.description,
    CONCAT(helper.first_name, ' ', helper.last_name) AS assigned_to,
-   rt.end_date, rt.status
+   rt.end_date, rt.assigned_on
    FROM recurring_tasks rt
    LEFT JOIN users helper ON rt.helper_id = helper.id
    WHERE rt.task_priority = 'High'
@@ -267,12 +368,299 @@ A: SELECT rt.id, rt.task_id, rt.description,
 
 Q: "Recurring task completion status for user ID 44"
 A: SELECT
-   COUNT(CASE WHEN rt.status = 'completed' THEN 1 END) AS completed_tasks,
-   COUNT(CASE WHEN rt.status = 'pending' THEN 1 END) AS pending_tasks,
-   COUNT(CASE WHEN rt.status = 'in_progress' THEN 1 END) AS in_progress_tasks,
-   COUNT(CASE WHEN rt.status = 'not_done' THEN 1 END) AS not_done_tasks
+   SUM(CASE WHEN rtt.completed_at IS NOT NULL THEN 1 ELSE 0 END) AS completed_tasks,
+   SUM(CASE WHEN rtt.completed_at IS NULL AND rtt.not_done_at IS NULL THEN 1 ELSE 0 END) AS pending_tasks,
+   SUM(CASE WHEN rtt.not_done_at IS NOT NULL THEN 1 ELSE 0 END) AS not_done_tasks
    FROM recurring_tasks rt
-   WHERE rt.helper_id = 44;
+   INNER JOIN recurring_task_trackings rtt ON rtt.recurring_task_id = rt.id
+   WHERE rtt.user_id = 44;
+
+Q: "Recurring tasks of user for today" or "Today's recurring tasks for user"
+A: SELECT
+    rt.*,
+    rtt.id AS assigneeTrackingId,
+    rtt.completed_at,
+    rtt.not_done_at,
+    IF(
+        rta.recurring_task_uid IS NOT NULL AND rt.sequence_number IS NOT NULL,
+        CONCAT(rta.recurring_task_uid, '.', rt.sequence_number),
+        rt.task_id
+    ) AS recurring_task_uid
+   FROM recurring_tasks rt
+   INNER JOIN recurring_task_trackings rtt ON rtt.recurring_task_id = rt.id
+   INNER JOIN recurring_task_assignees rta
+       ON rta.recurring_master_task_id = rt.recurring_task_id
+       AND rta.user_id = rtt.user_id
+   INNER JOIN users u ON rt.raiser_id = u.id AND u.status = 1 AND u.deleted_at IS NULL
+   WHERE rtt.user_id = ?
+       AND rtt.completed_at IS NULL
+       AND rtt.not_done_at IS NULL
+       AND rt.assigned_on = CURDATE()
+       AND COALESCE(rta.archive, 0) <> 1
+   ORDER BY rt.assigned_on DESC, rtt.id DESC
+   LIMIT 100;
+
+Q: "Recurring tasks of user between dates" or "User recurring tasks for date range"
+A: SELECT
+    rt.*,
+    rtt.id AS assigneeTrackingId,
+    rtt.completed_at,
+    rtt.not_done_at,
+    IF(
+        rta.recurring_task_uid IS NOT NULL AND rt.sequence_number IS NOT NULL,
+        CONCAT(rta.recurring_task_uid, '.', rt.sequence_number),
+        rt.task_id
+    ) AS recurring_task_uid
+   FROM recurring_tasks rt
+   INNER JOIN recurring_task_trackings rtt ON rtt.recurring_task_id = rt.id
+   INNER JOIN recurring_task_assignees rta
+       ON rta.recurring_master_task_id = rt.recurring_task_id
+       AND rta.user_id = rtt.user_id
+   INNER JOIN users u ON rt.raiser_id = u.id AND u.status = 1 AND u.deleted_at IS NULL
+   WHERE rtt.user_id = ?
+       AND rtt.completed_at IS NULL
+       AND rtt.not_done_at IS NULL
+       AND rt.assigned_on >= '2026-01-01'
+       AND rt.assigned_on <= '2026-01-31'
+       AND COALESCE(rta.archive, 0) <> 1
+   ORDER BY rt.assigned_on DESC, rtt.id DESC
+   LIMIT 100;
+
+Q: "Pending recurring tasks for user" or "Incomplete recurring tasks of user"
+A: SELECT
+    rt.id,
+    rt.task_id,
+    rt.description,
+    rt.task_priority,
+    rt.assigned_on,
+    CONCAT(raiser.first_name, ' ', raiser.last_name) AS raiser_name,
+    IF(
+        rta.recurring_task_uid IS NOT NULL AND rt.sequence_number IS NOT NULL,
+        CONCAT(rta.recurring_task_uid, '.', rt.sequence_number),
+        rt.task_id
+    ) AS recurring_task_uid
+   FROM recurring_tasks rt
+   INNER JOIN recurring_task_trackings rtt ON rtt.recurring_task_id = rt.id
+   INNER JOIN recurring_task_assignees rta
+       ON rta.recurring_master_task_id = rt.recurring_task_id
+       AND rta.user_id = rtt.user_id
+   INNER JOIN users raiser ON rt.raiser_id = raiser.id AND raiser.status = 1 AND raiser.deleted_at IS NULL
+   WHERE rtt.user_id = ?
+       AND rtt.completed_at IS NULL
+       AND rtt.not_done_at IS NULL
+       AND COALESCE(rta.archive, 0) <> 1
+   ORDER BY rt.assigned_on DESC
+   LIMIT 100;
+
+Q: "Completed recurring tasks of user for this month"
+A: SELECT
+    rt.id,
+    rt.task_id,
+    rt.description,
+    rt.task_priority,
+    rt.assigned_on,
+    rtt.completed_at,
+    CONCAT(raiser.first_name, ' ', raiser.last_name) AS raiser_name
+   FROM recurring_tasks rt
+   INNER JOIN recurring_task_trackings rtt ON rtt.recurring_task_id = rt.id
+   INNER JOIN users raiser ON rt.raiser_id = raiser.id
+   WHERE rtt.user_id = ?
+       AND rtt.completed_at IS NOT NULL
+       AND rtt.completed_at >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
+       AND rtt.completed_at < DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH)
+   ORDER BY rtt.completed_at DESC
+   LIMIT 100;
+
+Q: "Recurring task status summary for user" or "User recurring task statistics"
+A: SELECT
+    SUM(CASE WHEN rtt.completed_at IS NOT NULL THEN 1 ELSE 0 END) AS completed_count,
+    SUM(CASE WHEN rtt.completed_at IS NULL AND rtt.not_done_at IS NULL THEN 1 ELSE 0 END) AS pending_count,
+    SUM(CASE WHEN rtt.not_done_at IS NOT NULL THEN 1 ELSE 0 END) AS not_done_count,
+    COUNT(*) AS total_count
+   FROM recurring_tasks rt
+   INNER JOIN recurring_task_trackings rtt ON rtt.recurring_task_id = rt.id
+   INNER JOIN recurring_task_assignees rta
+       ON rta.recurring_master_task_id = rt.recurring_task_id
+       AND rta.user_id = rtt.user_id
+   WHERE rtt.user_id = ?
+       AND COALESCE(rta.archive, 0) <> 1;
+
+Q: "List all master recurring tasks" or "Show recurring master tasks"
+A: SELECT
+    rmt.id,
+    rmt.mt_id AS master_task_id,
+    rmt.description,
+    rmt.task_priority,
+    rmt.start_date,
+    rmt.end_date,
+    tf.name AS frequency,
+    CONCAT(raiser.first_name, ' ', raiser.last_name) AS raiser_name,
+    (SELECT COUNT(*) FROM recurring_task_assignees WHERE recurring_master_task_id = rmt.id AND COALESCE(archive, 0) <> 1) AS assignee_count
+   FROM recurring_master_tasks rmt
+   INNER JOIN users raiser ON rmt.raiser_id = raiser.id
+   LEFT JOIN task_frequencies tf ON rmt.task_frequency_id = tf.id
+   WHERE rmt.archieve = 0
+   ORDER BY rmt.created_at DESC
+   LIMIT 100;
+
+Q: "List recurring tasks of Amit" or "Show Amit's master recurring tasks" or "Recurring tasks assigned to user"
+A: SELECT
+    rmt.id,
+    rmt.mt_id AS master_task_id,
+    rmt.description,
+    rmt.task_priority,
+    rmt.start_date,
+    rmt.end_date,
+    rta.recurring_task_uid,
+    CONCAT(raiser.first_name, ' ', raiser.last_name) AS raiser_name,
+    CONCAT(assignee.first_name, ' ', assignee.last_name) AS assignee_name
+   FROM recurring_master_tasks rmt
+   INNER JOIN recurring_task_assignees rta ON rta.recurring_master_task_id = rmt.id
+   INNER JOIN users assignee ON rta.user_id = assignee.id
+   LEFT JOIN users raiser ON rmt.raiser_id = raiser.id
+   WHERE CONCAT(assignee.first_name, ' ', assignee.last_name) LIKE '%Amit%'
+       AND assignee.status = 1
+       AND assignee.deleted_at IS NULL
+       AND COALESCE(rta.archive, 0) <> 1
+       AND rmt.archieve = 0
+   ORDER BY rmt.id DESC
+   LIMIT 100;
+
+Q: "Show assignees for master task ID 5" or "Who is assigned to recurring task 5"
+A: SELECT
+    rta.id,
+    rta.recurring_task_uid,
+    CONCAT(u.first_name, ' ', u.last_name) AS assignee_name,
+    u.email,
+    CONCAT(reviewer.first_name, ' ', reviewer.last_name) AS reviewer_name,
+    rta.assigned_at,
+    rta.is_active
+   FROM recurring_task_assignees rta
+   INNER JOIN users u ON rta.user_id = u.id
+   LEFT JOIN users reviewer ON rta.reviewer_id = reviewer.id
+   WHERE rta.recurring_master_task_id = 5
+       AND COALESCE(rta.archive, 0) <> 1
+   ORDER BY rta.assigned_at DESC;
+
+Q: "Master tasks created by user" or "Recurring tasks raised by user"
+A: SELECT
+    rmt.id,
+    rmt.mt_id AS master_task_id,
+    rmt.description,
+    rmt.task_priority,
+    rmt.start_date,
+    rmt.end_date,
+    (SELECT COUNT(*) FROM recurring_task_assignees WHERE recurring_master_task_id = rmt.id AND COALESCE(archive, 0) <> 1) AS assignee_count
+   FROM recurring_master_tasks rmt
+   WHERE rmt.raiser_id = ?
+       AND rmt.archieve = 0
+   ORDER BY rmt.created_at DESC
+   LIMIT 100;
+
+Q: "Recurring task completion rate by user" or "User wise recurring task performance"
+A: SELECT
+    CONCAT(u.first_name, ' ', u.last_name) AS user_name,
+    COUNT(*) AS total_tasks,
+    SUM(CASE WHEN rtt.completed_at IS NOT NULL THEN 1 ELSE 0 END) AS completed,
+    SUM(CASE WHEN rtt.not_done_at IS NOT NULL THEN 1 ELSE 0 END) AS not_done,
+    SUM(CASE WHEN rtt.completed_at IS NULL AND rtt.not_done_at IS NULL THEN 1 ELSE 0 END) AS pending,
+    ROUND(SUM(CASE WHEN rtt.completed_at IS NOT NULL THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 2) AS completion_rate
+   FROM users u
+   INNER JOIN recurring_task_trackings rtt ON rtt.user_id = u.id
+   INNER JOIN recurring_tasks rt ON rt.id = rtt.recurring_task_id
+   INNER JOIN recurring_task_assignees rta ON rta.recurring_master_task_id = rt.recurring_task_id AND rta.user_id = u.id
+   WHERE u.status = 1
+       AND COALESCE(rta.archive, 0) <> 1
+   GROUP BY u.id, u.first_name, u.last_name
+   ORDER BY completion_rate DESC
+   LIMIT 100;
+
+Q: "Recurring tasks pending review" or "Tasks awaiting reviewer approval"
+A: SELECT
+    rt.id,
+    rt.task_id,
+    rt.description,
+    rt.assigned_on,
+    CONCAT(assignee.first_name, ' ', assignee.last_name) AS assignee_name,
+    CONCAT(reviewer.first_name, ' ', reviewer.last_name) AS reviewer_name,
+    rtt.completed_at
+   FROM recurring_tasks rt
+   INNER JOIN recurring_task_trackings rtt ON rtt.recurring_task_id = rt.id
+   INNER JOIN recurring_task_assignees rta ON rta.recurring_master_task_id = rt.recurring_task_id AND rta.user_id = rtt.user_id
+   INNER JOIN users assignee ON rtt.user_id = assignee.id
+   LEFT JOIN users reviewer ON rta.reviewer_id = reviewer.id
+   WHERE rtt.completed_at IS NOT NULL
+       AND rtt.reviewer_status IS NULL
+       AND COALESCE(rta.archive, 0) <> 1
+   ORDER BY rtt.completed_at DESC
+   LIMIT 100;
+
+Q: "Overdue recurring tasks by user" or "Late recurring tasks"
+A: SELECT
+    rt.id,
+    rt.task_id,
+    rt.description,
+    rt.assigned_on,
+    DATEDIFF(CURDATE(), rt.assigned_on) AS days_overdue,
+    CONCAT(u.first_name, ' ', u.last_name) AS assignee_name
+   FROM recurring_tasks rt
+   INNER JOIN recurring_task_trackings rtt ON rtt.recurring_task_id = rt.id
+   INNER JOIN recurring_task_assignees rta ON rta.recurring_master_task_id = rt.recurring_task_id AND rta.user_id = rtt.user_id
+   INNER JOIN users u ON rtt.user_id = u.id
+   WHERE rt.assigned_on < CURDATE()
+       AND rtt.completed_at IS NULL
+       AND rtt.not_done_at IS NULL
+       AND COALESCE(rta.archive, 0) <> 1
+   ORDER BY rt.assigned_on ASC
+   LIMIT 100;
+
+Q: "How many overdue recurring tasks are there for Amit" or "Count overdue recurring tasks for user"
+A: SELECT COUNT(*) AS overdue_recurring_tasks
+   FROM recurring_tasks rt
+   INNER JOIN recurring_task_trackings rtt ON rtt.recurring_task_id = rt.id
+   INNER JOIN recurring_task_assignees rta ON rta.recurring_master_task_id = rt.recurring_task_id AND rta.user_id = rtt.user_id
+   INNER JOIN users u ON rtt.user_id = u.id
+   WHERE CONCAT(u.first_name, ' ', u.last_name) LIKE '%Amit%'
+       AND rt.assigned_on < CURDATE()
+       AND rtt.completed_at IS NULL
+       AND rtt.not_done_at IS NULL
+       AND COALESCE(rta.archive, 0) <> 1
+       AND u.status = 1;
+
+Q: "Daily recurring task summary" or "Today's recurring task overview"
+A: SELECT
+    SUM(CASE WHEN rtt.completed_at IS NOT NULL THEN 1 ELSE 0 END) AS completed_today,
+    SUM(CASE WHEN rtt.not_done_at IS NOT NULL THEN 1 ELSE 0 END) AS not_done_today,
+    SUM(CASE WHEN rtt.completed_at IS NULL AND rtt.not_done_at IS NULL THEN 1 ELSE 0 END) AS pending_today,
+    COUNT(*) AS total_today
+   FROM recurring_tasks rt
+   INNER JOIN recurring_task_trackings rtt ON rtt.recurring_task_id = rt.id
+   INNER JOIN recurring_task_assignees rta ON rta.recurring_master_task_id = rt.recurring_task_id AND rta.user_id = rtt.user_id
+   WHERE rt.assigned_on = CURDATE()
+       AND COALESCE(rta.archive, 0) <> 1;
+
+Q: "How many recurring tasks are there in IT department" or "Recurring tasks count in IT department" or "Count recurring tasks by department"
+A: SELECT COUNT(DISTINCT rmt.id) AS total_recurring_tasks
+   FROM recurring_master_tasks rmt
+   INNER JOIN recurring_task_assignees rta ON rta.recurring_master_task_id = rmt.id
+   INNER JOIN users u ON rta.user_id = u.id
+   INNER JOIN departments d ON u.department_id = d.id
+   WHERE d.name LIKE '%IT%'
+       AND rmt.archieve = 0
+       AND COALESCE(rta.archive, 0) <> 1
+       AND u.status = 1;
+
+Q: "Recurring tasks count by all departments" or "Department-wise recurring task count"
+A: SELECT
+    d.name AS department_name,
+    COUNT(DISTINCT rmt.id) AS recurring_task_count
+   FROM departments d
+   LEFT JOIN users u ON u.department_id = d.id AND u.status = 1
+   LEFT JOIN recurring_task_assignees rta ON rta.user_id = u.id AND COALESCE(rta.archive, 0) <> 1
+   LEFT JOIN recurring_master_tasks rmt ON rta.recurring_master_task_id = rmt.id AND rmt.archieve = 0
+   WHERE d.status = 1
+   GROUP BY d.id, d.name
+   ORDER BY recurring_task_count DESC;
 
 Q: "Rajesh Bhati's ticket status breakdown" or "Show Rajesh ticket counts by status"
 A: SELECT
@@ -381,6 +769,14 @@ A: SELECT id, CONCAT(first_name, ' ', last_name) AS name, email, user_name
    WHERE CONCAT(first_name, ' ', last_name) LIKE '%john%doe%'
    AND status = 1
    LIMIT 10;
+
+Q: "How many help tickets has Yogesh assigned to Piyush" or "Tickets assigned by one user to another"
+A: SELECT COUNT(ht.id) AS assigned_tickets
+   FROM hit_tickets ht
+   INNER JOIN users assigner ON ht.user_id = assigner.id
+   INNER JOIN users helper ON ht.helping_person_id = helper.id
+   WHERE CONCAT(assigner.first_name, ' ', assigner.last_name) LIKE '%yogesh%'
+   AND CONCAT(helper.first_name, ' ', helper.last_name) LIKE '%piyush%';
 
 Now generate a SQL query for the following question:
 """

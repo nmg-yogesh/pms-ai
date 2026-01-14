@@ -15,7 +15,9 @@ from backend.models.conversation import (
     ConversationContextCreate,
     ConversationContextResponse,
     SessionListResponse,
-    MessageType
+    MessageType,
+    ConversationErrorCreate,
+    ConversationErrorResponse
 )
 import json
 
@@ -121,6 +123,27 @@ class ConversationService:
         except Exception as e:
             logger.error(f"Error listing sessions: {e}")
             raise
+        
+        
+    async def store_error(self, message_data: ConversationErrorCreate) -> ConversationErrorResponse:
+        """Store an error message in the conversation"""
+        try:
+            with engine.connect() as conn:
+                query = text("""
+                    INSERT INTO conversation_errors
+                    (session_id, error_message)
+                    VALUES (:session_id, :error_message)
+                """)
+                result = conn.execute(query, {
+                    "session_id": message_data.session_id,
+                    "error_message": message_data.error_message
+                })
+                conn.commit()
+                return ConversationErrorResponse(error=message_data.error_message, id=result.lastrowid)
+        except Exception as e:
+            logger.error(f"Error storing error: {e}")
+            raise
+       
 
     async def add_message(self, message_data: ConversationMessageCreate) -> ConversationMessageResponse:
         """Add a message to a conversation"""

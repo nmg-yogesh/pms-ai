@@ -17,6 +17,7 @@ import {
   getConversationHistory,
   listChatSessions
 } from './services/openaiService';
+import { storeConversationError } from './utils/conversationError';
 
 export default function AIDBAssistant() {
   const [input, setInput] = useState('');
@@ -176,6 +177,8 @@ export default function AIDBAssistant() {
           content: response.error || 'Failed to process query',
           timestamp: new Date()
         };
+        await storeConversationError(currentSessionId, response.error || 'Failed to process query');
+        
         setMessages(prev => [...prev, errorMessage]);
         setLoading(false);
         return;
