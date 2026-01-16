@@ -498,7 +498,7 @@ A: SELECT
     (SELECT COUNT(*) FROM recurring_task_assignees WHERE recurring_master_task_id = rmt.id AND COALESCE(archive, 0) <> 1) AS assignee_count
    FROM recurring_master_tasks rmt
    INNER JOIN users raiser ON rmt.raiser_id = raiser.id
-   LEFT JOIN task_frequencies tf ON rmt.task_frequency_id = tf.id
+   LEFT JOIN task_frequency_masters tf ON rmt.task_frequency_id = tf.id
    WHERE rmt.archieve = 0
    ORDER BY rmt.created_at DESC
    LIMIT 100;
@@ -1050,6 +1050,142 @@ User asked: "{query}"
 Query results: {results}
 
 Provide a clear and friendly explanation. If the user's question or the data shows important patterns, anomalies, or insights, provide a full explanation (3-6 sentences or more as appropriate), including any useful recommendations. If the request is brief and does not require details, a concise 1-2 sentence summary is sufficient. """
+
+# ==================== RAG PROMPT BUILDER ====================
+
+def build_rag_system_prompt(
+    relevant_tables: list,
+    similar_examples: list = None,
+    relevant_docs: list = None,
+    role: Optional[str] = None
+) -> str:
+    """
+    Build an optimized system prompt using RAG context.
+
+    This uses retrieved relevant context instead of the full database schema,
+    significantly reducing token usage while maintaining accuracy.
+
+    Args:
+        relevant_tables: List of relevant table schemas from vector search
+        similar_examples: List of similar query examples
+        relevant_docs: List of relevant documentation chunks
+        role: Optional role for role-specific instructions
+
+    Returns:
+        Optimized system prompt with relevant context only
+    """
+    prompt_parts = []
+
+    # Header
+    prompt_parts.append("""You are an expert SQL query generator for a Project Management System (PMS) database.
+
+CRITICAL INSTRUCTIONS - FOLLOW STRICTLY:
+
+1. **SCHEMA VERIFICATION (MOST IMPORTANT)**:
+   - BEFORE writing any SQL, carefully review the RELEVANT TABLES below
+   - ONLY use table names and columns that exist in the provided schema
+   - If a table or column doesn't exist, DO NOT use it
+
+2. **TABLE AND COLUMN NAMING**:
+   - Table names are case-sensitive - use exact names from schema
+   - Column names are case-sensitive - use exact names from schema
+
+3. **JOINS AND RELATIONSHIPS**:
+   - Use LEFT JOIN when query says "all users", "everyone" (includes users with 0 count)
+   - Use INNER JOIN when query asks for "users who have" (excludes users with 0 count)
+   - For hit_tickets: helping_person_id = assignee, user_id = creator
+
+4. **QUERY CONSTRUCTION**:
+   - Generate ONLY valid MySQL SELECT queries
+   - Use LIMIT clause (default 100) for large result sets
+   - For user names: CONCAT(first_name, ' ', last_name)
+   - For name searches: ALWAYS use LIKE with % wildcards
+   - Handle NULL values with COALESCE or IS NULL
+
+5. **SAFETY RULES**:
+   - Return ONLY the SQL query, no explanations
+   - Only SELECT queries are allowed
+   - No DELETE, DROP, TRUNCATE, UPDATE, INSERT, ALTER
+
+6. **VISUALIZATION**:
+   - For status breakdowns: use SUM(condition) AS column_name pattern
+   - Single entity + status → PIE CHART
+   - Multiple entities + status → STACKED BAR CHART
+   - Rankings → BAR CHART""")
+
+    # Add relevant tables
+    if relevant_tables:
+        prompt_parts.append("\n\n=== RELEVANT TABLES ===\n")
+        for table in relevant_tables:
+            if isinstance(table, dict):
+                prompt_parts.append(table.get("schema_text", ""))
+            else:
+                prompt_parts.append(str(table))
+            prompt_parts.append("\n")
+
+    # Add similar examples
+    if similar_examples:
+        prompt_parts.append("\n=== SIMILAR QUERY EXAMPLES ===\n")
+        for i, example in enumerate(similar_examples[:3], 1):  # Limit to 3 examples
+            if isinstance(example, dict):
+                nl = example.get("natural_language", "")
+                sql = example.get("sql_query", "")
+                prompt_parts.append(f"Q{i}: {nl}\nSQL: {sql}\n\n")
+            else:
+                prompt_parts.append(f"{example}\n")
+
+    # Add relevant documentation
+    if relevant_docs:
+        prompt_parts.append("\n=== RELEVANT GUIDELINES ===\n")
+        for doc in relevant_docs[:3]:  # Limit to 3 docs
+            if isinstance(doc, dict):
+                content = doc.get("content", "")
+                prompt_parts.append(f"{content}\n\n")
+            else:
+                prompt_parts.append(f"{doc}\n")
+
+    # Add role-specific instructions
+    if role:
+        role_l = role.lower()
+        if 'fms' in role_l:
+            prompt_parts.append("\n=== FMS ADMIN CONTEXT ===\nPrioritize FMS workflow queries. Include workflow steps and entry progress when relevant.\n")
+        elif 'hit' in role_l:
+            prompt_parts.append("\n=== HIT ADMIN CONTEXT ===\nPrioritize ticket status queries. Use helping_person_id for assignee, user_id for creator.\n")
+        elif 'recurring' in role_l:
+            prompt_parts.append("\n=== RECURRING TASKS CONTEXT ===\nUse recurring_task_trackings for completion status. Join with recurring_task_assignees for user assignments.\n")
+
+    # Footer
+    prompt_parts.append("\nNow generate a SQL query for the following question:\n")
+
+    return "".join(prompt_parts)
+
+
+def get_rag_system_prompt_fallback() -> str:
+    """
+    Get a minimal system prompt for when RAG context is not available.
+    This is a slimmed down version for fallback scenarios.
+    """
+    return """You are an expert SQL query generator for a Project Management System (PMS) database.
+
+CRITICAL INSTRUCTIONS:
+1. Generate ONLY valid MySQL SELECT queries
+2. Use proper JOINs based on context
+3. For user names: CONCAT(first_name, ' ', last_name)
+4. For name searches: Use LIKE with % wildcards
+5. Add LIMIT 100 to prevent large result sets
+6. Handle NULL values appropriately
+7. No DELETE, DROP, UPDATE, INSERT, ALTER - only SELECT
+
+Common Tables:
+- users (id, first_name, last_name, email, department_id, status)
+- departments (id, name, status)
+- hit_tickets (id, user_id, helping_person_id, status, is_inprogress, done_status)
+- fms_masters, fms_entries, fms_steps, fms_entry_progress
+- recurring_master_tasks, recurring_tasks, recurring_task_trackings
+
+Generate a SQL query for the following question:
+"""
+
 
 # Prompt for query validation
 VALIDATION_PROMPT = """Analyze this SQL query and determine if it's safe to execute:

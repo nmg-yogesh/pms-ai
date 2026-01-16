@@ -9,9 +9,10 @@ import logging
 import time
 
 from backend.config import settings
-from backend.routers import agentic, health, conversation
+from backend.routers import agentic, health, conversation, rag
 from backend.models.database import test_connection
 from backend.utils.schema_loader import DB_SCHEMA
+from backend.services.vector_db_service import vector_db_service
 
 # Configure logging
 logging.basicConfig(
@@ -46,6 +47,34 @@ async def lifespan(app: FastAPI):
         logger.info(f"✓ Database schema loaded ({table_count} tables)")
     else:
         logger.warning("✗ Database schema not loaded properly")
+
+    # Initialize Vector Database for RAG
+    if settings.RAG_ENABLED:
+        try:
+            if vector_db_service.initialize():
+                stats = vector_db_service.get_stats()
+                logger.info(f"✓ Vector DB initialized (Schema: {stats.get('schema_count', 0)}, "
+                           f"Examples: {stats.get('examples_count', 0)}, "
+                           f"Docs: {stats.get('docs_count', 0)})")
+
+                # Auto-index if empty
+                if vector_db_service.is_empty():
+                    logger.info("Vector DB is empty, running initial indexing...")
+                    try:
+                        from backend.scripts.index_all import index_all
+                        result = index_all(force_reindex=False)
+                        if result.get("success"):
+                            logger.info(f"✓ Initial indexing complete: {result.get('message')}")
+                        else:
+                            logger.warning(f"Initial indexing had issues: {result.get('message')}")
+                    except Exception as idx_error:
+                        logger.warning(f"Auto-indexing failed (run manually): {idx_error}")
+            else:
+                logger.warning("✗ Vector DB initialization failed")
+        except Exception as e:
+            logger.warning(f"✗ Vector DB error: {e}")
+    else:
+        logger.info("ℹ RAG disabled (RAG_ENABLED=False)")
 
     yield
     
@@ -102,6 +131,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 app.include_router(health.router, prefix=settings.API_V1_PREFIX)
 app.include_router(agentic.router, prefix=settings.API_V1_PREFIX)
 app.include_router(conversation.router, prefix=settings.API_V1_PREFIX)
+app.include_router(rag.router, prefix=settings.API_V1_PREFIX)
 
 
 @app.get("/")

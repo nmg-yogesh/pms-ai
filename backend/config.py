@@ -50,6 +50,13 @@ class Settings(BaseSettings):
     API_V1_PREFIX: str = "/api/v1"
     MAX_QUERY_LENGTH: int = 500
 
+    # Vector Database & RAG Settings
+    CHROMA_PERSIST_DIR: str = str(Path(__file__).resolve().parent / "data" / "chromadb")
+    EMBEDDING_MODEL: str = "text-embedding-3-small"
+    EMBEDDING_DIMENSIONS: int = 1536
+    RAG_TOP_K: int = 5  # Number of relevant chunks to retrieve
+    RAG_ENABLED: bool = True  # Toggle RAG on/off
+
     @property
     def cors_origins_list(self) -> List[str]:
         """Convert CORS_ORIGINS string to list"""

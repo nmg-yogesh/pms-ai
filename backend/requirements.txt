@@ -32,3 +32,8 @@ pytest-asyncio==0.21.1
 # PDF parsing for transcript extraction
 pypdf==3.16.0
 
+# Vector Database & RAG
+chromadb==0.4.22
+tiktoken==0.5.2
+numpy<2.0  # Required for chromadb compatibility
+

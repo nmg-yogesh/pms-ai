@@ -6,7 +6,14 @@ import re
 from typing import Optional, Tuple, List
 from openai import OpenAI
 from backend.config import settings
-from backend.utils.prompts import get_system_prompt, get_role_system_prompt, EXPLANATION_PROMPT, VALIDATION_PROMPT
+from backend.utils.prompts import (
+    get_system_prompt,
+    get_role_system_prompt,
+    build_rag_system_prompt,
+    get_rag_system_prompt_fallback,
+    EXPLANATION_PROMPT,
+    VALIDATION_PROMPT
+)
 from backend.utils.schema_loader import load_schema_from_sql, parse_sql_schema
 
 logger = logging.getLogger(__name__)
@@ -190,13 +197,70 @@ class OpenAIService:
             logger.warning(f"Schema validation error: {e}")
             return True, f"Validation skipped: {str(e)}"
 
-    async def generate_sql_query(self, user_query: str, role: Optional[str] = None, retry_count: int = 0) -> str:
+    async def _get_rag_system_prompt(self, user_query: str, role: Optional[str] = None) -> Optional[str]:
+        """
+        Get system prompt using RAG context from vector database
+
+        Args:
+            user_query: User's natural language query
+            role: Optional role for filtering
+
+        Returns:
+            RAG-enhanced system prompt or None if RAG not available
+        """
+        try:
+            # Import here to avoid circular imports
+            from backend.services.vector_db_service import vector_db_service
+
+            # Check if vector DB is initialized
+            if not vector_db_service.is_initialized():
+                logger.debug("Vector DB not initialized, falling back to traditional prompt")
+                return None
+
+            # Check if collections are empty
+            if vector_db_service.is_empty():
+                logger.debug("Vector DB is empty, falling back to traditional prompt")
+                return None
+
+            # Get RAG context
+            rag_context = vector_db_service.get_rag_context(
+                query=user_query,
+                role=role,
+                include_examples=True,
+                include_docs=True
+            )
+
+            # Check if we got useful context
+            if not rag_context.get("relevant_tables"):
+                logger.debug("No relevant tables found in RAG, falling back to traditional prompt")
+                return None
+
+            # Build RAG-enhanced prompt
+            system_prompt = build_rag_system_prompt(
+                relevant_tables=rag_context.get("relevant_tables", []),
+                similar_examples=rag_context.get("similar_examples", []),
+                relevant_docs=rag_context.get("relevant_docs", []),
+                role=role
+            )
+
+            logger.info(f"Using RAG prompt with {len(rag_context.get('relevant_tables', []))} tables, "
+                       f"{len(rag_context.get('similar_examples', []))} examples, "
+                       f"{len(rag_context.get('relevant_docs', []))} docs")
+
+            return system_prompt
+
+        except Exception as e:
+            logger.warning(f"Error getting RAG context: {e}")
+            return None
+
+    async def generate_sql_query(self, user_query: str, role: Optional[str] = None, retry_count: int = 0, use_rag: bool = None) -> str:
         """
         Generate SQL query from natural language with schema validation
 
         Args:
             user_query: Natural language query from user
             retry_count: Number of retry attempts (internal use)
+            use_rag: Whether to use RAG (defaults to settings.RAG_ENABLED)
 
         Returns:
             Generated SQL query string
@@ -204,15 +268,25 @@ class OpenAIService:
         try:
             logger.info(f"Generating SQL for query: {user_query} (attempt {retry_count + 1})")
 
-            # Get the system prompt with current database schema
-            if role:
-                try:
-                    system_prompt = get_role_system_prompt(role, user_query=user_query)
-                except Exception as e:
-                    logger.warning(f"Failed to build role-aware system prompt ({role}): {e}")
+            # Determine if RAG should be used
+            if use_rag is None:
+                use_rag = settings.RAG_ENABLED
+
+            # Try to use RAG if enabled
+            system_prompt = None
+            if use_rag:
+                system_prompt = await self._get_rag_system_prompt(user_query, role)
+
+            # Fall back to traditional prompts if RAG not available or failed
+            if system_prompt is None:
+                if role:
+                    try:
+                        system_prompt = get_role_system_prompt(role, user_query=user_query)
+                    except Exception as e:
+                        logger.warning(f"Failed to build role-aware system prompt ({role}): {e}")
+                        system_prompt = get_system_prompt()
+                else:
                     system_prompt = get_system_prompt()
-            else:
-                system_prompt = get_system_prompt()
 
             # Add schema validation reminder for retries
             if retry_count > 0:
